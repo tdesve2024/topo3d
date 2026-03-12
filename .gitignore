@@ -1,0 +1,15 @@
+# Données topo (volumineux)
+data/
+
+# Fichiers générés
+sortie/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Session
+session.json

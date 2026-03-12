@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paramètres — Carte 3D</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1e1e2e; color: #cdd6f4; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── Stepper ── */
+    #stepper {
+      display: flex; align-items: center; gap: 0;
+      background: #181825; border-bottom: 1px solid #313244;
+      padding: 0 20px; height: 40px; flex-shrink: 0;
+    }
+    .step { display: flex; align-items: center; gap: 7px; padding: 0 14px; height: 100%; font-size: 12px; font-weight: 600; color: #6c7086; cursor: default; }
+    .step.active { color: #89b4fa; border-bottom: 2px solid #89b4fa; }
+    .step.done   { color: #a6e3a1; cursor: pointer; }
+    .step.done:hover { color: #cdd6f4; }
+    .step-num { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: #313244; color: #6c7086; }
+    .step.active .step-num { background: #89b4fa; color: #1e1e2e; }
+    .step.done   .step-num { background: #a6e3a1; color: #1e1e2e; }
+    .step-sep { color: #313244; padding: 0 4px; }
+
+    /* ── Layout ── */
+    #content { display: flex; flex: 1; gap: 0; }
+    #col-left  { width: 320px; flex-shrink: 0; border-right: 1px solid #313244; display: flex; flex-direction: column; }
+    #col-right { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+
+    .section { padding: 14px 18px; border-bottom: 1px solid #313244; }
+    .section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #89b4fa; text-transform: uppercase; margin-bottom: 12px; }
+
+    /* Zone summary */
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+    .info-item { font-size: 12px; }
+    .info-label { color: #6c7086; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+    .info-val   { color: #f9e2af; font-family: monospace; font-size: 13px; font-weight: 700; }
+    .info-val.ok  { color: #a6e3a1; }
+    .info-val.warn { color: #f38ba8; }
+
+    /* Fields */
+    .field { margin-bottom: 12px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { display: flex; justify-content: space-between; margin-bottom: 5px; color: #bac2de; font-size: 12px; }
+    .field label .val { color: #89dceb; font-weight: 700; }
+    input[type=range] { width: 100%; accent-color: #89b4fa; cursor: pointer; }
+    select { width: 100%; background: #313244; color: #cdd6f4; border: 1px solid #45475a; border-radius: 5px; padding: 5px 8px; font-size: 12px; cursor: pointer; }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 16px; border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-blue  { background: #89b4fa; color: #1e1e2e; }
+    .btn-blue:hover  { background: #b4d0f7; }
+    .btn-green { background: #a6e3a1; color: #1e1e2e; }
+    .btn-green:hover { background: #b9f0b3; }
+    .btn:disabled { background: #45475a; color: #6c7086; cursor: not-allowed; }
+    .btn.loading  { opacity: 0.7; cursor: wait; }
+
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Progress bar */
+    .progress-wrap { height: 6px; background: #313244; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+    .progress-bar  { height: 100%; background: #89b4fa; border-radius: 3px; transition: width 0.3s; width: 0%; }
+
+    /* Analysis table */
+    #analyse-section { display: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { background: #181825; color: #89b4fa; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #313244; }
+    td { padding: 6px 10px; border-bottom: 1px solid #181825; color: #a6adc8; }
+    tr:hover td { background: #24243e; }
+    td.num  { text-align: right; font-family: monospace; color: #cdd6f4; }
+    td.best { color: #a6e3a1; font-weight: 700; }
+    tr.current-row td { background: #2d2d50; }
+    tr.current-row td.num { color: #89dceb; }
+
+    /* Preview */
+    #preview-section { display: none; }
+    #preview-img { max-width: 100%; max-height: 380px; border-radius: 6px; border: 1px solid #313244; display: block; margin: 0 auto; }
+
+    /* Error */
+    .error-box { background: #3c1a1a; border: 1px solid #f38ba8; border-radius: 5px; padding: 10px 14px; color: #f38ba8; font-size: 12px; font-family: monospace; white-space: pre-wrap; margin-top: 10px; }
+
+    #next-section { padding: 14px 18px; margin-top: auto; border-top: 1px solid #313244; }
+    #next-btn { width: 100%; padding: 12px; background: #a6e3a1; color: #1e1e2e; border: none; border-radius: 6px; font-weight: 700; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+    #next-btn:hover    { background: #b9f0b3; }
+    #next-btn:disabled { background: #45475a; color: #6c7086; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<!-- Stepper -->
+<div id="stepper">
+  <div class="step done" onclick="window.location='/'">
+    <div class="step-num">1</div> Zone
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step active">
+    <div class="step-num">2</div> Paramètres
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step">
+    <div class="step-num">3</div> Générer
+  </div>
+</div>
+
+<div id="content">
+
+  <!-- ── Colonne gauche : résumé zone + paramètres ── -->
+  <div id="col-left">
+
+    <!-- Résumé zone -->
+    <div class="section">
+      <div class="section-title">Zone sélectionnée</div>
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="info-label">Centre</div>
+          <div class="info-val">{{ "%.4f"|format(session.lat) }}°N</div>
+          <div class="info-val">{{ "%.4f"|format(session.lon|abs) }}°W</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Format carte</div>
+          <div class="info-val">{{ session.carte_w }} × {{ session.carte_h }} mm</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Zone réelle</div>
+          <div class="info-val">{{ session.largeur }} × {{ session.hauteur }} km</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Échelle</div>
+          <div class="info-val {{ 'ok' if 3000 <= session.echelle <= 30000 else 'warn' }}">
+            1 / {{ "{:,}".format(session.echelle).replace(",", "\u202f") }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paramètres génération -->
+    <div class="section">
+      <div class="section-title">Paramètres</div>
+      <div class="field">
+        <label>Équidistance <span class="val" id="lbl-equi">{{ session.equidistance }} m</span></label>
+        <select id="sel-equi">
+          <option value="2" {% if session.equidistance == 2 %}selected{% endif %}>2 m</option>
+          <option value="5" {% if session.equidistance == 5 %}selected{% endif %}>5 m</option>
+          <option value="10" {% if session.equidistance == 10 %}selected{% endif %}>10 m</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Seuil surface min <span class="val" id="lbl-seuil">{{ session.seuil_surface|int }} m²</span></label>
+        <input type="range" id="sl-seuil" min="0" max="20000" step="500" value="{{ session.seuil_surface }}">
+      </div>
+      <div class="field">
+        <label>Diamètre fraise <span class="val" id="lbl-fraise">{{ session.fraise_mm }} mm</span></label>
+        <input type="range" id="sl-fraise" min="0.5" max="6" step="0.5" value="{{ session.fraise_mm }}">
+      </div>
+      <div class="field">
+        <label>Angle fraise V <span class="val" id="lbl-angle">{{ session.angle_fraise_v }}°</span></label>
+        <input type="range" id="sl-angle" min="15" max="60" step="5" value="{{ session.angle_fraise_v }}">
+      </div>
+      <div class="field">
+        <label>Épaisseur couche <span class="val" id="lbl-ep">{{ session.epaisseur }} mm</span></label>
+        <input type="range" id="sl-ep" min="1" max="6" step="0.5" value="{{ session.epaisseur }}">
+      </div>
+    </div>
+
+    <!-- Analyse -->
+    <div class="section">
+      <div class="section-title">Analyse des seuils</div>
+      <p style="font-size:11px; color:#6c7086; margin-bottom:10px;">
+        Lance le calcul des pièces pour différents seuils de surface minimum.
+      </p>
+      <div class="btn-row">
+        <button class="btn btn-blue" id="btn-analyse" onclick="lancerAnalyse()">Lancer l'analyse</button>
+        <button class="btn btn-blue" id="btn-preview" onclick="lancerPreview()">Aperçu</button>
+      </div>
+      <div class="progress-wrap" id="analyse-progress-wrap" style="display:none;">
+        <div class="progress-bar" id="analyse-progress"></div>
+      </div>
+    </div>
+
+    <!-- Next -->
+    <div id="next-section">
+      <button id="next-btn" onclick="window.location='/generate'">Générer les SVG →</button>
+    </div>
+  </div>
+
+  <!-- ── Colonne droite : résultats ── -->
+  <div id="col-right">
+
+    <!-- Résultats analyse -->
+    <div class="section" id="analyse-section">
+      <div class="section-title">Résultats — Pièces par seuil</div>
+      <table id="analyse-table">
+        <thead>
+          <tr>
+            <th>Seuil (m²)</th>
+            <th>Surface carte (mm²)</th>
+            <th>≈ Côté (mm)</th>
+            <th>Pièces totales</th>
+          </tr>
+        </thead>
+        <tbody id="analyse-body"></tbody>
+      </table>
+      <div id="analyse-error" class="error-box" style="display:none;"></div>
+    </div>
+
+    <!-- Aperçu -->
+    <div class="section" id="preview-section">
+      <div class="section-title">Aperçu</div>
+      <div class="progress-wrap" id="preview-progress-wrap" style="display:none;">
+        <div class="progress-bar" id="preview-progress" style="width:0%;"></div>
+      </div>
+      <img id="preview-img" src="" alt="Aperçu" style="display:none;">
+      <div id="preview-error" class="error-box" style="display:none;"></div>
+    </div>
+
+    <!-- Placeholder si rien encore -->
+    <div id="placeholder" style="flex:1; display:flex; align-items:center; justify-content:center; color:#313244; font-size:14px; padding:40px; text-align:center;">
+      Lancez l'analyse ou l'aperçu pour voir les résultats ici.
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Sliders ──────────────────────────────────────────────────────────────────
+document.getElementById('sl-seuil').addEventListener('input', function() {
+  document.getElementById('lbl-seuil').textContent = parseInt(this.value).toLocaleString('fr-FR') + ' m²';
+});
+document.getElementById('sl-fraise').addEventListener('input', function() {
+  document.getElementById('lbl-fraise').textContent = this.value + ' mm';
+});
+document.getElementById('sl-angle').addEventListener('input', function() {
+  document.getElementById('lbl-angle').textContent = this.value + '°';
+});
+document.getElementById('sl-ep').addEventListener('input', function() {
+  document.getElementById('lbl-ep').textContent = this.value + ' mm';
+});
+document.getElementById('sel-equi').addEventListener('change', function() {
+  document.getElementById('lbl-equi').textContent = this.value + ' m';
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function currentParams() {
+  return {
+    equidistance:  parseInt(document.getElementById('sel-equi').value),
+    seuil_surface: parseFloat(document.getElementById('sl-seuil').value),
+    fraise_mm:     parseFloat(document.getElementById('sl-fraise').value),
+    angle_fraise_v:parseFloat(document.getElementById('sl-angle').value),
+    epaisseur:     parseFloat(document.getElementById('sl-ep').value),
+  };
+}
+
+async function pollJob(jid, onProgress, onDone, onError) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 600));
+    const r = await fetch('/api/status/' + jid);
+    const job = await r.json();
+    if (job.total > 0) onProgress(job.done, job.total);
+    if (job.error) { onError(job.error); return; }
+    if (job.finished) { onDone(job.result); return; }
+  }
+}
+
+// ── Analyse ──────────────────────────────────────────────────────────────────
+async function lancerAnalyse() {
+  const btn = document.getElementById('btn-analyse');
+  btn.disabled = true; btn.classList.add('loading'); btn.textContent = 'Analyse…';
+  document.getElementById('analyse-section').style.display = 'none';
+  document.getElementById('analyse-error').style.display = 'none';
+  document.getElementById('placeholder').style.display = 'flex';
+
+  const wrap = document.getElementById('analyse-progress-wrap');
+  const bar  = document.getElementById('analyse-progress');
+  wrap.style.display = 'block'; bar.style.width = '2%';
+
+  try {
+    const resp = await fetch('/api/analyse', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentParams()),
+    });
+    const { job_id } = await resp.json();
+
+    await pollJob(job_id,
+      (done, total) => { bar.style.width = Math.round(done / total * 100) + '%'; },
+      (result) => {
+        wrap.style.display = 'none';
+        afficherAnalyse(result);
+        btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Relancer';
+      },
+      (err) => {
+        wrap.style.display = 'none';
+        document.getElementById('analyse-section').style.display = 'block';
+        document.getElementById('analyse-error').style.display = 'block';
+        document.getElementById('analyse-error').textContent = err;
+        document.getElementById('placeholder').style.display = 'none';
+        btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Relancer';
+      }
+    );
+  } catch(e) {
+    wrap.style.display = 'none';
+    btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Relancer';
+    alert('Erreur réseau : ' + e.message);
+  }
+}
+
+function afficherAnalyse(result) {
+  const tbody = document.getElementById('analyse-body');
+  tbody.innerHTML = '';
+  const seuilCourant = parseFloat(document.getElementById('sl-seuil').value);
+
+  result.seuils.forEach((seuil, i) => {
+    const total     = result.totaux[i];
+    const corresp   = result.correspondances[i];
+    const isCurrent = seuil === seuilCourant;
+    const tr = document.createElement('tr');
+    if (isCurrent) tr.className = 'current-row';
+
+    tr.innerHTML = `
+      <td>${seuil.toLocaleString('fr-FR')}</td>
+      <td class="num">${corresp.mm2.toLocaleString('fr-FR')}</td>
+      <td class="num">${corresp.cote}</td>
+      <td class="num ${isCurrent ? 'best' : ''}">${total.toLocaleString('fr-FR')}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('analyse-section').style.display = 'block';
+  document.getElementById('placeholder').style.display = 'none';
+}
+
+// ── Preview ───────────────────────────────────────────────────────────────────
+async function lancerPreview() {
+  const btn = document.getElementById('btn-preview');
+  btn.disabled = true; btn.classList.add('loading'); btn.textContent = 'Aperçu…';
+  document.getElementById('preview-error').style.display = 'none';
+
+  const wrap = document.getElementById('preview-progress-wrap');
+  const bar  = document.getElementById('preview-progress');
+  document.getElementById('preview-section').style.display = 'block';
+  document.getElementById('placeholder').style.display = 'none';
+  wrap.style.display = 'block'; bar.style.width = '5%';
+  document.getElementById('preview-img').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/preview', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentParams()),
+    });
+    const { job_id } = await resp.json();
+
+    await pollJob(job_id,
+      (done, total) => { bar.style.width = Math.round(done / total * 100) + '%'; },
+      (result) => {
+        wrap.style.display = 'none';
+        const img = document.getElementById('preview-img');
+        img.src = result.url + '?t=' + Date.now();
+        img.style.display = 'block';
+        btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Rafraîchir';
+      },
+      (err) => {
+        wrap.style.display = 'none';
+        document.getElementById('preview-error').style.display = 'block';
+        document.getElementById('preview-error').textContent = err;
+        btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Aperçu';
+      }
+    );
+  } catch(e) {
+    wrap.style.display = 'none';
+    btn.disabled = false; btn.classList.remove('loading'); btn.textContent = 'Aperçu';
+    alert('Erreur réseau : ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zone — Carte 3D</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: flex; flex-direction: column; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; background: #1e1e2e; }
+
+    /* ── Stepper ── */
+    #stepper {
+      display: flex; align-items: center; gap: 0;
+      background: #181825; border-bottom: 1px solid #313244;
+      padding: 0 16px; height: 40px; flex-shrink: 0;
+    }
+    .step {
+      display: flex; align-items: center; gap: 7px;
+      padding: 0 14px; height: 100%;
+      font-size: 12px; font-weight: 600; color: #6c7086;
+    }
+    .step.active { color: #89b4fa; border-bottom: 2px solid #89b4fa; }
+    .step.done   { color: #a6e3a1; }
+    .step-num {
+      width: 20px; height: 20px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700;
+      background: #313244; color: #6c7086;
+    }
+    .step.active .step-num { background: #89b4fa; color: #1e1e2e; }
+    .step.done   .step-num { background: #a6e3a1; color: #1e1e2e; }
+    .step-sep { color: #313244; padding: 0 4px; }
+
+    /* ── Main layout ── */
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #map  { flex: 1; }
+    #panel {
+      width: 290px;
+      background: #1e1e2e; color: #cdd6f4;
+      display: flex; flex-direction: column; overflow-y: auto;
+    }
+    .panel-section { padding: 12px 16px; border-bottom: 1px solid #313244; }
+    .panel-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      color: #89b4fa; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .app-title    { font-size: 15px; font-weight: 700; color: #cba6f7; margin-bottom: 2px; }
+    .app-subtitle { font-size: 11px; color: #6c7086; }
+
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: flex; justify-content: space-between;
+      margin-bottom: 4px; color: #bac2de; font-size: 12px;
+    }
+    .field label .val { color: #89dceb; font-weight: 700; }
+    input[type=range] { width: 100%; accent-color: #89b4fa; cursor: pointer; }
+    select {
+      width: 100%; background: #313244; color: #cdd6f4;
+      border: 1px solid #45475a; border-radius: 5px;
+      padding: 5px 8px; font-size: 12px; cursor: pointer;
+    }
+
+    .result-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid #1e1e2e;
+      font-size: 12px; color: #a6adc8;
+    }
+    .result-row:last-child { border-bottom: none; }
+    .result-val { color: #a6e3a1; font-weight: 700; text-align: right; max-width: 160px; }
+
+    .coord-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; }
+    .coord-item { display: flex; gap: 5px; align-items: baseline; }
+    .coord-label { color: #6c7086; font-weight: 700; min-width: 14px; }
+    .coord-val   { color: #f9e2af; font-family: monospace; }
+    .centre-row  { margin-top: 6px; font-size: 11px; color: #6c7086; }
+    .centre-row span { color: #f9e2af; font-family: monospace; }
+
+    .tile-toggle { display: flex; gap: 6px; }
+    .tile-btn {
+      flex: 1; padding: 6px; border: 1px solid #45475a;
+      background: #313244; color: #a6adc8; border-radius: 5px;
+      cursor: pointer; font-size: 11px; text-align: center; transition: all 0.15s;
+    }
+    .tile-btn:hover  { border-color: #89b4fa; color: #cdd6f4; }
+    .tile-btn.active { background: #89b4fa; color: #1e1e2e; border-color: #89b4fa; font-weight: 700; }
+
+    .hint { font-size: 10px; color: #45475a; margin-top: 6px; line-height: 1.4; }
+
+    #next-btn {
+      width: 100%; padding: 12px;
+      background: #a6e3a1; color: #1e1e2e;
+      border: none; border-radius: 6px;
+      font-weight: 700; font-size: 14px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    #next-btn:hover    { background: #b9f0b3; }
+    #next-btn:disabled { background: #45475a; color: #6c7086; cursor: not-allowed; }
+    #next-btn.loading  { background: #89b4fa; }
+  </style>
+</head>
+<body>
+
+<!-- Stepper -->
+<div id="stepper">
+  <div class="step active">
+    <div class="step-num">1</div> Zone
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step">
+    <div class="step-num">2</div> Paramètres
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step">
+    <div class="step-num">3</div> Générer
+  </div>
+</div>
+
+<div id="main">
+  <div id="map"></div>
+
+  <div id="panel">
+    <!-- En-tête -->
+    <div class="panel-section">
+      <div class="app-title">Carte 3D Port-Blanc</div>
+      <div class="app-subtitle">Penvénan — Côtes-d'Armor</div>
+    </div>
+
+    <!-- Fond de carte -->
+    <div class="panel-section">
+      <div class="panel-title">Fond de carte</div>
+      <div class="tile-toggle">
+        <div class="tile-btn active" id="btn-ign" onclick="setTile('ign')">IGN Géoportail</div>
+        <div class="tile-btn" id="btn-osm" onclick="setTile('osm')">OpenStreetMap</div>
+      </div>
+    </div>
+
+    <!-- Paramètres zone -->
+    <div class="panel-section">
+      <div class="panel-title">Paramètres zone</div>
+      <div class="field">
+        <label>Format / Ratio</label>
+        <select id="sel-ratio">
+          <option value="43:38" selected>43:38 — BenchPilot (défaut)</option>
+          <option value="4:3">4:3</option>
+          <option value="3:2">3:2</option>
+          <option value="16:9">16:9</option>
+          <option value="1:1">1:1 — Carré</option>
+          <option value="libre">Libre</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Largeur <span class="val" id="lbl-largeur">{{ session.largeur }} km</span></label>
+        <input type="range" id="sl-largeur" min="1" max="10" step="0.5" value="{{ session.largeur }}">
+      </div>
+      <div class="field">
+        <label>Hauteur <span class="val" id="lbl-hauteur">{{ session.hauteur }} km</span></label>
+        <input type="range" id="sl-hauteur" min="1" max="8" step="0.5" value="{{ session.hauteur }}">
+      </div>
+      <div class="field">
+        <label>Largeur carte <span class="val" id="lbl-carte-w">{{ session.carte_w }} mm</span></label>
+        <input type="range" id="sl-carte-w" min="50" max="431" step="1" value="{{ session.carte_w }}">
+      </div>
+      <div class="field">
+        <label>Hauteur carte <span class="val" id="lbl-carte-h">{{ session.carte_h }} mm</span></label>
+        <input type="range" id="sl-carte-h" min="50" max="431" step="1" value="{{ session.carte_h }}">
+      </div>
+      <div class="hint" style="margin-bottom:8px;">Bench Pilot max : 431 × 431 mm</div>
+      <div class="field">
+        <label>Équidistance</label>
+        <select id="sel-equi">
+          <option value="2" {% if session.equidistance == 2 %}selected{% endif %}>2 m</option>
+          <option value="5" {% if session.equidistance == 5 %}selected{% endif %}>5 m</option>
+          <option value="10" {% if session.equidistance == 10 %}selected{% endif %}>10 m</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Résultats -->
+    <div class="panel-section">
+      <div class="panel-title">Résultat</div>
+      <div class="result-row"><span>Format carte</span><span class="result-val" id="res-format">—</span></div>
+      <div class="result-row"><span>Échelle calculée</span><span class="result-val" id="res-echelle">—</span></div>
+      <div class="result-row"><span>Couches</span><span class="result-val" id="res-couches">—</span></div>
+      <div class="result-row"><span>Pièces estimées</span><span class="result-val" id="res-pieces">—</span></div>
+      <div class="result-row"><span>Hauteur empilée</span><span class="result-val" id="res-hauteur">—</span></div>
+    </div>
+
+    <!-- Coordonnées GPS -->
+    <div class="panel-section">
+      <div class="panel-title">Coordonnées GPS</div>
+      <div class="coord-grid">
+        <div class="coord-item"><span class="coord-label">N</span><span class="coord-val" id="c-n">—</span></div>
+        <div class="coord-item"><span class="coord-label">S</span><span class="coord-val" id="c-s">—</span></div>
+        <div class="coord-item"><span class="coord-label">E</span><span class="coord-val" id="c-e">—</span></div>
+        <div class="coord-item"><span class="coord-label">W</span><span class="coord-val" id="c-w">—</span></div>
+      </div>
+      <div class="centre-row">Centre : <span id="c-centre">—</span></div>
+      <div class="hint">Glisser le rectangle pour déplacer la zone.</div>
+    </div>
+
+    <!-- Action -->
+    <div class="panel-section" style="flex:1; display:flex; flex-direction:column; justify-content:flex-end;">
+      <button id="next-btn" onclick="figerZone()">Figer la zone →</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const BENCH_MAX_W = 431;
+const BENCH_MAX_H = 431;
+
+// ── État (initialisé depuis la session Flask) ───────────────────────────────
+let center = { lat: {{ session.lat }}, lon: {{ session.lon }} };
+
+// ── Carte ───────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([center.lat, center.lon], 13);
+
+const tileLayers = {
+  ign: L.tileLayer(
+    'https://wxs.ign.fr/essentiels/geoportail/wmts' +
+    '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+    '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal' +
+    '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}' +
+    '&FORMAT=image%2Fpng',
+    { attribution: '© IGN Géoportail', maxZoom: 18, crossOrigin: true }
+  ),
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors', maxZoom: 19
+  })
+};
+
+let currentTile = 'ign';
+tileLayers.ign.addTo(map);
+tileLayers.ign.once('tileerror', () => setTile('osm'));
+
+function setTile(name) {
+  if (currentTile === name) return;
+  map.removeLayer(tileLayers[currentTile]);
+  tileLayers[name].addTo(map);
+  currentTile = name;
+  document.getElementById('btn-ign').classList.toggle('active', name === 'ign');
+  document.getElementById('btn-osm').classList.toggle('active', name === 'osm');
+}
+
+// ── Conversion km ↔ degrés ──────────────────────────────────────────────────
+function kmToLatDeg(km) { return km / 111.32; }
+function kmToLonDeg(km, lat) { return km / (111.32 * Math.cos(lat * Math.PI / 180)); }
+
+function getBounds() {
+  const largeur = parseFloat(slLargeur.value);
+  const hauteur = parseFloat(slHauteur.value);
+  const dLat = kmToLatDeg(hauteur / 2);
+  const dLon = kmToLonDeg(largeur / 2, center.lat);
+  return L.latLngBounds(
+    [center.lat - dLat, center.lon - dLon],
+    [center.lat + dLat, center.lon + dLon]
+  );
+}
+
+// ── Rectangle draggable ─────────────────────────────────────────────────────
+let rect = null, dragging = false, dragOrigin = null, centerAtDragStart = null;
+
+function initRect() {
+  rect = L.rectangle(getBounds(), {
+    color: '#f38ba8', weight: 2,
+    fillColor: '#f38ba8', fillOpacity: 0.12, interactive: true
+  }).addTo(map);
+
+  rect.on('mousedown', (e) => {
+    if (e.originalEvent.button !== 0) return;
+    dragging = true;
+    dragOrigin = e.latlng;
+    centerAtDragStart = { ...center };
+    map.dragging.disable();
+    map.getContainer().style.cursor = 'grabbing';
+    L.DomEvent.stopPropagation(e);
+  });
+}
+
+map.on('mousemove', (e) => {
+  if (!dragging || !dragOrigin) return;
+  center.lat = centerAtDragStart.lat + (e.latlng.lat - dragOrigin.lat);
+  center.lon = centerAtDragStart.lon + (e.latlng.lng - dragOrigin.lng);
+  rect.setBounds(getBounds());
+  updatePanel();
+});
+
+map.on('mouseup', () => {
+  if (dragging) { dragging = false; map.dragging.enable(); map.getContainer().style.cursor = ''; }
+});
+
+// ── Références contrôles ────────────────────────────────────────────────────
+const slLargeur = document.getElementById('sl-largeur');
+const slHauteur = document.getElementById('sl-hauteur');
+const slCarteW  = document.getElementById('sl-carte-w');
+const slCarteH  = document.getElementById('sl-carte-h');
+const selRatio  = document.getElementById('sel-ratio');
+
+function getRatio() {
+  const val = selRatio.value;
+  if (val === 'libre') return null;
+  const [a, b] = val.split(':').map(Number);
+  return a / b;
+}
+
+function ratioZone() {
+  const ratio = getRatio();
+  if (ratio === null) return;
+  const h = Math.min(Math.max(+(parseFloat(slLargeur.value) / ratio).toFixed(1), 1), 8);
+  slHauteur.value = h;
+  document.getElementById('lbl-hauteur').textContent = h.toFixed(1) + ' km';
+}
+
+function ratioCarteDepuisW() {
+  const ratio = getRatio();
+  if (ratio === null) return;
+  const h = Math.min(Math.max(Math.round(parseInt(slCarteW.value) / ratio), 50), BENCH_MAX_H);
+  slCarteH.value = h;
+  document.getElementById('lbl-carte-h').textContent = h + ' mm';
+}
+
+function ratioCarteDepuisH() {
+  const ratio = getRatio();
+  if (ratio === null) return;
+  const w = Math.min(Math.max(Math.round(parseInt(slCarteH.value) * ratio), 50), BENCH_MAX_W);
+  slCarteW.value = w;
+  document.getElementById('lbl-carte-w').textContent = w + ' mm';
+}
+
+// ── Événements ──────────────────────────────────────────────────────────────
+selRatio.addEventListener('change', () => { ratioZone(); ratioCarteDepuisW(); rect.setBounds(getBounds()); updatePanel(); });
+
+slLargeur.addEventListener('input', function () {
+  document.getElementById('lbl-largeur').textContent = parseFloat(this.value).toFixed(1) + ' km';
+  ratioZone(); rect.setBounds(getBounds()); updatePanel();
+});
+
+slHauteur.addEventListener('input', function () {
+  const h = parseFloat(this.value);
+  document.getElementById('lbl-hauteur').textContent = h.toFixed(1) + ' km';
+  const ratio = getRatio();
+  if (ratio !== null) {
+    const l = Math.min(Math.max(+(h * ratio).toFixed(1), 1), 10);
+    slLargeur.value = l;
+    document.getElementById('lbl-largeur').textContent = l.toFixed(1) + ' km';
+  }
+  rect.setBounds(getBounds()); updatePanel();
+});
+
+slCarteW.addEventListener('input', function () {
+  document.getElementById('lbl-carte-w').textContent = this.value + ' mm';
+  ratioCarteDepuisW(); updatePanel();
+});
+
+slCarteH.addEventListener('input', function () {
+  document.getElementById('lbl-carte-h').textContent = this.value + ' mm';
+  ratioCarteDepuisH(); updatePanel();
+});
+
+document.getElementById('sel-equi').addEventListener('change', updatePanel);
+
+// ── Calculs & affichage ─────────────────────────────────────────────────────
+function updatePanel() {
+  const largeur = parseFloat(slLargeur.value);
+  const hauteur = parseFloat(slHauteur.value);
+  const carteW  = parseInt(slCarteW.value);
+  const carteH  = parseInt(slCarteH.value);
+  const equi    = parseInt(document.getElementById('sel-equi').value);
+  const ep      = 3;
+
+  const echelle   = Math.round(largeur * 1e6 / carteW);
+  const nMarine   = Math.ceil(15 / equi);
+  const nTerre    = Math.ceil(40 / equi);
+  const nTotal    = nMarine + 1 + nTerre;
+  const hEmpilee  = (nMarine + nTerre) * ep + ep;
+
+  const REF_PIECES = 51, REF_AREA = 4.3 * 3.8, REF_EQUI = 5;
+  const pieces = Math.round(REF_PIECES * (largeur * hauteur) / REF_AREA * (REF_EQUI / equi));
+
+  const echelleEl = document.getElementById('res-echelle');
+  echelleEl.textContent = `1 / ${echelle.toLocaleString('fr-FR')}`;
+  echelleEl.style.color = (echelle < 3000 || echelle > 30000) ? '#f38ba8' : '#a6e3a1';
+
+  document.getElementById('res-format').textContent  = `${carteW} × ${carteH} mm`;
+  document.getElementById('res-couches').textContent = `${nTotal}  (${nMarine} marine · 1 plexi · ${nTerre} terre)`;
+  document.getElementById('res-pieces').textContent  = `~${pieces}`;
+  document.getElementById('res-hauteur').textContent = `~${hEmpilee} mm`;
+
+  const b = getBounds();
+  const fmt = (v, d) => v.toFixed(d);
+  document.getElementById('c-n').textContent = fmt(b.getNorth(), 4) + '°N';
+  document.getElementById('c-s').textContent = fmt(b.getSouth(), 4) + '°N';
+  const east = b.getEast(), west = b.getWest();
+  document.getElementById('c-e').textContent = fmt(Math.abs(east), 4) + (east < 0 ? '°W' : '°E');
+  document.getElementById('c-w').textContent = fmt(Math.abs(west), 4) + (west < 0 ? '°W' : '°E');
+  document.getElementById('c-centre').textContent =
+    `${fmt(center.lat, 4)}°N, ${fmt(Math.abs(center.lon), 4)}°W`;
+}
+
+// ── Figer la zone ───────────────────────────────────────────────────────────
+async function figerZone() {
+  const btn = document.getElementById('next-btn');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = 'Enregistrement…';
+
+  const payload = {
+    lat:          center.lat,
+    lon:          center.lon,
+    largeur:      parseFloat(slLargeur.value),
+    hauteur:      parseFloat(slHauteur.value),
+    carte_w:      parseInt(slCarteW.value),
+    carte_h:      parseInt(slCarteH.value),
+    equidistance: parseInt(document.getElementById('sel-equi').value),
+    echelle:      Math.round(parseFloat(slLargeur.value) * 1e6 / parseInt(slCarteW.value)),
+  };
+
+  try {
+    const r = await fetch('/api/zone', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    window.location = '/params';
+  } catch (e) {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = 'Figer la zone →';
+    alert('Erreur : ' + e.message);
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+initRect();
+updatePanel();
+</script>
+</body>
+</html>

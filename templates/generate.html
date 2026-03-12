@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Générer — Carte 3D</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #1e1e2e; color: #cdd6f4; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── Stepper ── */
+    #stepper {
+      display: flex; align-items: center; gap: 0;
+      background: #181825; border-bottom: 1px solid #313244;
+      padding: 0 20px; height: 40px; flex-shrink: 0;
+    }
+    .step { display: flex; align-items: center; gap: 7px; padding: 0 14px; height: 100%; font-size: 12px; font-weight: 600; color: #6c7086; cursor: default; }
+    .step.active { color: #89b4fa; border-bottom: 2px solid #89b4fa; }
+    .step.done   { color: #a6e3a1; cursor: pointer; }
+    .step.done:hover { color: #cdd6f4; }
+    .step-num { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: #313244; color: #6c7086; }
+    .step.active .step-num { background: #89b4fa; color: #1e1e2e; }
+    .step.done   .step-num { background: #a6e3a1; color: #1e1e2e; }
+    .step-sep { color: #313244; padding: 0 4px; }
+
+    /* ── Content ── */
+    #content { max-width: 760px; width: 100%; margin: 0 auto; padding: 28px 20px; flex: 1; }
+
+    h2 { font-size: 18px; font-weight: 700; color: #cba6f7; margin-bottom: 6px; }
+    .subtitle { font-size: 12px; color: #6c7086; margin-bottom: 24px; }
+
+    /* Progress */
+    .progress-card { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .progress-label { font-size: 12px; color: #a6adc8; }
+    .progress-pct   { font-size: 13px; font-weight: 700; color: #89b4fa; }
+    .progress-wrap  { height: 8px; background: #313244; border-radius: 4px; overflow: hidden; }
+    .progress-bar   { height: 100%; background: linear-gradient(90deg, #89b4fa, #cba6f7); border-radius: 4px; transition: width 0.3s; width: 0%; }
+    .progress-bar.done { background: #a6e3a1; }
+    .progress-bar.error { background: #f38ba8; }
+
+    #status-msg { margin-top: 10px; font-size: 12px; color: #6c7086; min-height: 18px; }
+
+    /* Buttons */
+    .btn { padding: 9px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+    .btn-blue  { background: #89b4fa; color: #1e1e2e; }
+    .btn-blue:hover  { background: #b4d0f7; }
+    .btn-green { background: #a6e3a1; color: #1e1e2e; }
+    .btn-green:hover { background: #b9f0b3; }
+    .btn:disabled { background: #45475a; color: #6c7086; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+
+    /* Log table */
+    .section-title { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #89b4fa; text-transform: uppercase; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { background: #181825; color: #89b4fa; padding: 6px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #313244; }
+    td { padding: 7px 10px; border-bottom: 1px solid #181825; color: #a6adc8; }
+    tr:hover td { background: #24243e; }
+    td.num { text-align: right; font-family: monospace; color: #cdd6f4; }
+    td.ok  { color: #a6e3a1; }
+
+    /* Result card */
+    #result-card { display: none; background: #1a2e1a; border: 1px solid #a6e3a1; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    #result-card h3 { color: #a6e3a1; font-size: 15px; margin-bottom: 12px; }
+    .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .result-item { text-align: center; }
+    .result-num  { font-size: 28px; font-weight: 700; color: #a6e3a1; }
+    .result-lbl  { font-size: 11px; color: #6c7086; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+    .result-path { margin-top: 12px; font-size: 11px; color: #6c7086; font-family: monospace; word-break: break-all; }
+    .result-path span { color: #89b4fa; }
+
+    /* Error */
+    #error-card { display: none; background: #3c1a1a; border: 1px solid #f38ba8; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+    #error-card h3 { color: #f38ba8; margin-bottom: 8px; }
+    #error-msg { color: #f38ba8; font-family: monospace; font-size: 11px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+
+    #log-section { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- Stepper -->
+<div id="stepper">
+  <div class="step done" onclick="window.location='/'">
+    <div class="step-num">1</div> Zone
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step done" onclick="window.location='/params'">
+    <div class="step-num">2</div> Paramètres
+  </div>
+  <div class="step-sep">›</div>
+  <div class="step active">
+    <div class="step-num">3</div> Générer
+  </div>
+</div>
+
+<div id="content">
+  <h2>Génération des SVG</h2>
+  <p class="subtitle">Les fichiers SVG sont générés pour chaque couche dans le dossier de sortie.</p>
+
+  <!-- Contrôles -->
+  <div class="btn-row">
+    <button class="btn btn-blue" id="btn-start" onclick="lancerGeneration()">Lancer la génération</button>
+    <button class="btn btn-green" id="btn-params" onclick="window.location='/params'">← Retour paramètres</button>
+  </div>
+
+  <!-- Progression -->
+  <div class="progress-card">
+    <div class="progress-header">
+      <span class="progress-label" id="progress-label">En attente…</span>
+      <span class="progress-pct" id="progress-pct">—</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div id="status-msg"></div>
+  </div>
+
+  <!-- Résultat succès -->
+  <div id="result-card">
+    <h3>✓ Génération terminée</h3>
+    <div class="result-grid">
+      <div class="result-item">
+        <div class="result-num" id="res-files">—</div>
+        <div class="result-lbl">Fichiers SVG</div>
+      </div>
+      <div class="result-item">
+        <div class="result-num" id="res-pieces">—</div>
+        <div class="result-lbl">Pièces totales</div>
+      </div>
+      <div class="result-item">
+        <div class="result-num" id="res-couches">—</div>
+        <div class="result-lbl">Couches</div>
+      </div>
+    </div>
+    <div class="result-path">Dossier : <span id="res-path">—</span></div>
+  </div>
+
+  <!-- Erreur -->
+  <div id="error-card">
+    <h3>Erreur</h3>
+    <div id="error-msg"></div>
+  </div>
+
+  <!-- Log des couches -->
+  <div id="log-section">
+    <div class="section-title">Log des couches</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Couche</th>
+          <th>Pièces</th>
+          <th>État</th>
+        </tr>
+      </thead>
+      <tbody id="log-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let jobId    = null;
+let polling  = false;
+let logCount = 0;
+
+async function lancerGeneration() {
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true; btn.textContent = 'En cours…';
+
+  // Reset UI
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('error-card').style.display  = 'none';
+  document.getElementById('log-section').style.display = 'none';
+  document.getElementById('log-body').innerHTML = '';
+  logCount = 0;
+
+  const bar = document.getElementById('progress-bar');
+  bar.style.width = '1%';
+  bar.className = 'progress-bar';
+  document.getElementById('progress-label').textContent = 'Démarrage…';
+  document.getElementById('progress-pct').textContent   = '0 %';
+  document.getElementById('status-msg').textContent     = '';
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    jobId = data.job_id;
+    polling = true;
+    pollStatus();
+  } catch(e) {
+    afficherErreur(e.message);
+    btn.disabled = false; btn.textContent = 'Relancer';
+  }
+}
+
+async function pollStatus() {
+  while (polling) {
+    await new Promise(r => setTimeout(r, 700));
+    try {
+      const r   = await fetch('/api/status/' + jobId);
+      const job = await r.json();
+
+      // Mise à jour progress
+      if (job.total > 0) {
+        const pct = Math.round(job.done / job.total * 100);
+        document.getElementById('progress-bar').style.width = pct + '%';
+        document.getElementById('progress-pct').textContent  = pct + ' %';
+        document.getElementById('progress-label').textContent =
+          `Couche ${job.done} / ${job.total}`;
+      }
+
+      // Mise à jour log
+      if (job.log && job.log.length > logCount) {
+        document.getElementById('log-section').style.display = 'block';
+        const tbody = document.getElementById('log-body');
+        for (let i = logCount; i < job.log.length; i++) {
+          const e = job.log[i];
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="num">${String(e.num).padStart(2, '0')}</td>
+            <td>${escHtml(e.nom)}</td>
+            <td class="num">${e.n}</td>
+            <td class="ok">✓</td>
+          `;
+          tbody.appendChild(tr);
+        }
+        logCount = job.log.length;
+      }
+
+      if (job.error) {
+        polling = false;
+        document.getElementById('progress-bar').className = 'progress-bar error';
+        document.getElementById('progress-bar').style.width = '100%';
+        document.getElementById('progress-label').textContent = 'Erreur';
+        afficherErreur(job.error);
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-start').textContent = 'Relancer';
+        return;
+      }
+
+      if (job.finished) {
+        polling = false;
+        const bar = document.getElementById('progress-bar');
+        bar.style.width = '100%';
+        bar.className   = 'progress-bar done';
+        document.getElementById('progress-label').textContent = 'Terminé !';
+        document.getElementById('progress-pct').textContent   = '100 %';
+        document.getElementById('status-msg').textContent     = '';
+
+        if (job.result) {
+          const r = job.result;
+          document.getElementById('res-files').textContent   = r.n_files;
+          document.getElementById('res-pieces').textContent  = r.total_pieces;
+          document.getElementById('res-couches').textContent = logCount;
+          document.getElementById('res-path').textContent    = r.dossier;
+          document.getElementById('result-card').style.display = 'block';
+        }
+
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-start').textContent = 'Relancer';
+        return;
+      }
+
+    } catch(e) {
+      // Silently retry on network error
+    }
+  }
+}
+
+function afficherErreur(msg) {
+  document.getElementById('error-card').style.display = 'block';
+  document.getElementById('error-msg').textContent    = msg;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
