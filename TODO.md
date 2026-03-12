@@ -26,7 +26,7 @@ pour s'assurer que tous les champs sont persistés.
 
 ## 5. Comprendre comment générer des SVG préparés pour Shaper Origin
 La Shaper Origin utilise les informations du fichier SVG pour affiner ses stratégies de fraisage. Pour comprendre, il faut accéder aux pages suivantes :
-https://support.shapertools.com/fr/hc/fr-fr/articles/115002721473-concevoir-pour-origin
+https://support.shapertools.com/fr/hc/fr-fr/articles/115002721473-concevoir-pour-origin et 
 https://support.shapertools.com/fr/hc/fr-fr/articles/12946815194011-codage-manuel-de-la-profondeur-de-fraisage-svg
 Les couleurs de trait et de remplissage permettent de définir le type de fraisage (interne, externe, sur la ligne ou pocket) et des champs
 dans les instructions SVG
@@ -34,3 +34,4 @@ dans les instructions SVG
 ## 6. Gérer les bords de la carte
 Les pièces qui vont jusqu'au bord de la carte n'ont pas besoin d'être découpées sur les bords justement. 
 Cela évite d'avoir un biseau inélégant sur les bords de la carte finalisée
+
